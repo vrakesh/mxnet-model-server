@@ -198,7 +198,7 @@ def run_single_benchmark(jmx, jmeter_args=dict(), threads=100, out_dir=None):
         run_process(docker_run_call)
         run_process("{} exec -it {} sh -c 'cd /mxnet-model-server && python setup.py bdist_wheel --universal && pip install --user -U -e .'".format(docker, container), shell=True)
         run_process("{} exec -it {} sh -c 'cd /mxnet-model-server && pip install --user -U -e .'".format(docker, container), shell=True)
-        run_process("{} exec -it {} sh -c 'pip installl mxnet-cu92mkl==1.3.0.post0'".format(docker, container), shell=True)
+        run_process("{} exec -it {} sh -c 'pip install mxnet-cu92mkl==1.3.0.post0'".format(docker, container), shell=True)
         run_process("{} start {}".format(docker, container))
 
         docker_start_call = "{} exec {} mxnet-model-server --start --mms-config {}".format(docker, container, DOCKER_CONFIG_PROP)
