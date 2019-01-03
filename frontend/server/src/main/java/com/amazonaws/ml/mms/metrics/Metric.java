@@ -46,6 +46,8 @@ public class Metric {
     @SerializedName("HostName")
     private String hostName;
 
+    private String type;
+
     public Metric() {}
 
     public Metric(
@@ -117,6 +119,10 @@ public class Metric {
         this.timestamp = timestamp;
     }
 
+    public void setType(String type) {
+        this.type = type;
+    }
+
     public static Metric parse(String line) {
         // DiskAvailable.Gigabytes:311|#Level:Host,hostname:localhost
         Matcher matcher = PATTERN.matcher(line);
@@ -132,6 +138,18 @@ public class Metric {
         metric.setHostName(matcher.group(5));
         metric.setTimestamp(matcher.group(6));
         metric.setRequestId(matcher.group(8));
+        // Find type of metric for statsD
+        switch (metric.getUnit()) {
+            case "Milliseconds":
+            case "Seconds":
+                metric.setType("ms");
+                break;
+            case "Count":
+                metric.setType("c");
+                break;
+            default:
+                metric.setType("g");
+        }
 
         if (dimensions != null) {
             String[] dimension = dimensions.split(",");
@@ -151,7 +169,14 @@ public class Metric {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder(128);
-        sb.append(metricName).append('.').append(unit).append(':').append(getValue()).append("|#");
+        sb.append(metricName)
+                .append('.')
+                .append(unit)
+                .append(':')
+                .append(getValue())
+                .append('|')
+                .append(type)
+                .append("|#");
         boolean first = true;
         for (Dimension dimension : getDimensions()) {
             if (first) {
@@ -161,11 +186,10 @@ public class Metric {
             }
             sb.append(dimension.getName()).append(':').append(dimension.getValue());
         }
-        sb.append("|#hostname:").append(hostName);
-        if (requestId != null) {
-            sb.append(",requestID:").append(requestId);
+        if (!first) {
+            sb.append(',');
         }
-        sb.append(",timestamp:").append(timestamp);
+        sb.append("hostname:").append(hostName);
         return sb.toString();
     }
 }

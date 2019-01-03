@@ -67,6 +67,7 @@ public final class ConfigManager {
     private static final String JOB_QUEUE_SIZE = "job_queue_size";
     private static final String NUMBER_OF_GPU = "number_of_gpu";
     private static final String METRIC_TIME_INTERVAL = "metric_time_interval";
+    private static final String CLOUDWATCH_AGENT_ADDRESS = "cloudwatch_agent_address";
 
     private static final String CORS_ALLOWED_ORIGIN = "cors_allowed_origin";
     private static final String CORS_ALLOWED_METHODS = "cors_allowed_methods";
@@ -194,6 +195,10 @@ public final class ConfigManager {
 
     public URI getManagementAddress() {
         return getAddressProperty(MANAGEMENT_ADDRESS, "http://127.0.0.1:8081");
+    }
+
+    public String getCloudWatchAgentAddress() {
+        return prop.getProperty(CLOUDWATCH_AGENT_ADDRESS, null);
     }
 
     public int getNettyThreads() {

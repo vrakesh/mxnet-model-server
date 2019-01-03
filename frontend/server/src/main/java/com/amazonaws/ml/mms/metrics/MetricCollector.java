@@ -47,7 +47,12 @@ public class MetricCollector implements Runnable {
             args[0] = configManager.getPythonExecutable();
             args[1] = "mms/metrics/metric_collector.py";
             File workingDir = new File(configManager.getModelServerHome());
-
+            String cloudWatchAddress = configManager.getCloudWatchAgentAddress();
+            StatsDClient client = null;
+            if (cloudWatchAddress != null) {
+                String[] address = cloudWatchAddress.split(":");
+                client = new StatsDClient(address[0], Integer.parseInt(address[1]));
+            }
             String pythonPath = System.getenv("PYTHONPATH");
             String pythonEnv;
             if ((pythonPath == null || pythonPath.isEmpty())
@@ -107,6 +112,9 @@ public class MetricCollector implements Runnable {
                         logger.warn("Parse metrics failed: " + line);
                     } else {
                         loggerMetrics.info(metric);
+                        if (client != null) {
+                            client.send(metric.toString());
+                        }
                         metricsSystem.add(metric);
                     }
                 }

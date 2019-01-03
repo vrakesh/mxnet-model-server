@@ -14,6 +14,7 @@ package com.amazonaws.ml.mms.wlm;
 
 import com.amazonaws.ml.mms.archive.Manifest;
 import com.amazonaws.ml.mms.metrics.Metric;
+import com.amazonaws.ml.mms.metrics.StatsDClient;
 import com.amazonaws.ml.mms.util.ConfigManager;
 import com.amazonaws.ml.mms.util.NettyUtils;
 import io.netty.channel.unix.DomainSocketAddress;
@@ -123,8 +124,10 @@ public class WorkerLifeCycle {
                                 + '-'
                                 + model.getModelName()
                                         .substring(0, Math.min(model.getModelName().length(), 25));
-                new ReaderThread(threadName, process.getErrorStream(), true, this).start();
-                new ReaderThread(threadName, process.getInputStream(), false, this).start();
+                new ReaderThread(threadName, process.getErrorStream(), true, this, configManager)
+                        .start();
+                new ReaderThread(threadName, process.getInputStream(), false, this, configManager)
+                        .start();
             }
 
             if (latch.await(2, TimeUnit.MINUTES)) {
@@ -177,14 +180,25 @@ public class WorkerLifeCycle {
         private InputStream is;
         private boolean error;
         private WorkerLifeCycle lifeCycle;
+        private StatsDClient client;
         static final org.apache.log4j.Logger loggerModelMetrics =
                 org.apache.log4j.Logger.getLogger(ConfigManager.MODEL_METRICS_LOGGER);
 
-        public ReaderThread(String name, InputStream is, boolean error, WorkerLifeCycle lifeCycle) {
+        public ReaderThread(
+                String name,
+                InputStream is,
+                boolean error,
+                WorkerLifeCycle lifeCycle,
+                ConfigManager configManager) {
             super(name + (error ? "-stderr" : "-stdout"));
             this.is = is;
             this.error = error;
             this.lifeCycle = lifeCycle;
+            String cloudWatchAddress = configManager.getCloudWatchAgentAddress();
+            if (cloudWatchAddress != null) {
+                String[] address = cloudWatchAddress.split(":");
+                client = new StatsDClient(address[0], Integer.parseInt(address[1]));
+            }
         }
 
         @Override
@@ -196,7 +210,11 @@ public class WorkerLifeCycle {
                         break;
                     }
                     if (result.startsWith("[METRICS]")) {
-                        loggerModelMetrics.info(Metric.parse(result.substring(9)));
+                        Metric metric = Metric.parse(result.substring(9));
+                        if (client != null) {
+                            client.send(metric.toString());
+                        }
+                        loggerModelMetrics.info(metric);
                         continue;
                     }
 
