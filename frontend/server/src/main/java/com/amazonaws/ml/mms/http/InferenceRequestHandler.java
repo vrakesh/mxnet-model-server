@@ -117,7 +117,10 @@ public class InferenceRequestHandler extends HttpRequestHandler {
         if (modelName == null) {
             modelName = input.getStringParameter("model_name");
             if (modelName == null) {
-                throw new BadRequestException("Parameter model_name is required.");
+                Map.Entry<String, Model> entry =
+                        ModelManager.getInstance().getModels().entrySet().iterator().next();
+                modelName = entry.getKey();
+                // throw new BadRequestException("Parameter model_name is required.");
             }
         }
 

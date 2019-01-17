@@ -78,6 +78,8 @@ public final class ConfigManager {
     private static final String CERTIFICATE_FILE = "certificate_file";
     private static final String PRIVATE_KEY_FILE = "private_key_file";
 
+    private static final String DEFAULT_SERVICE_HANDLER = "default_service_handler";
+
     private Pattern blacklistPattern;
 
     private Properties prop;
@@ -254,6 +256,10 @@ public final class ConfigManager {
 
     public String getPythonExecutable() {
         return prop.getProperty("PYTHON_EXECUTABLE", "python");
+    }
+
+    public String getDefaultServiceHandler() {
+        return prop.getProperty(DEFAULT_SERVICE_HANDLER, null);
     }
 
     public String getModelStore() {

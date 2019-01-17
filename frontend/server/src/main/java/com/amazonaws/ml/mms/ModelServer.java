@@ -12,6 +12,7 @@
  */
 package com.amazonaws.ml.mms;
 
+import com.amazonaws.ml.mms.archive.Manifest;
 import com.amazonaws.ml.mms.archive.ModelArchive;
 import com.amazonaws.ml.mms.archive.ModelException;
 import com.amazonaws.ml.mms.metrics.MetricManager;
@@ -20,6 +21,8 @@ import com.amazonaws.ml.mms.util.NettyUtils;
 import com.amazonaws.ml.mms.util.ServerGroups;
 import com.amazonaws.ml.mms.wlm.ModelManager;
 import com.amazonaws.ml.mms.wlm.WorkLoadManager;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -30,8 +33,13 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.InvalidPropertiesFormatException;
@@ -53,6 +61,7 @@ public class ModelServer {
     private ServerGroups serverGroups;
     private List<ChannelFuture> futures = new ArrayList<>(2);
     private AtomicBoolean stopped = new AtomicBoolean(false);
+    public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private ConfigManager configManager;
 
@@ -122,13 +131,15 @@ public class ModelServer {
             }
 
             File modelStoreDir = new File(modelStore);
-            if (!modelStoreDir.exists()) {
+            if (Files.isDirectory(Paths.get(modelStore))) {
                 logger.warn("Model store path is not found: {}", modelStore);
                 return;
             }
-
+            logger.info(modelStore);
+            logger.info(String.valueOf(modelStoreDir));
             // Check folders to see if they can be models as well
             File[] files = modelStoreDir.listFiles();
+            logger.info(String.valueOf(files));
             if (files != null) {
                 for (File file : files) {
                     if (file.isHidden()) {
@@ -142,8 +153,38 @@ public class ModelServer {
                     }
                     try {
                         logger.debug("Loading models from model store: {}", file.getName());
-
-                        ModelArchive archive = modelManager.registerModel(file.getName());
+                        ModelArchive archive = null;
+                        if (configManager.getDefaultServiceHandler() == null) {
+                            archive = modelManager.registerModel(file.getName());
+                        } else {
+                            archive =
+                                    modelManager.registerModel(
+                                            file.getName(),
+                                            file.getName(),
+                                            null,
+                                            configManager.getDefaultServiceHandler(),
+                                            1,
+                                            100);
+                            Manifest manifest = archive.getManifest();
+                            manifest.getModel().setModelName(file.getName());
+                            manifest.getModel()
+                                    .setHandler(configManager.getDefaultServiceHandler());
+                            manifest.getModel().addExtension("graphName", file.getName());
+                            String manifestFileString =
+                                    archive.getModelDir() + "/MAR-INF/MANIFEST.json";
+                            File manifestFile = new File(manifestFileString);
+                            try {
+                                if (!manifestFile.getParentFile().getAbsoluteFile().mkdirs()
+                                        && !manifestFile.getAbsoluteFile().createNewFile()) {
+                                    logger.error("Error creating file");
+                                }
+                                FileOutputStream out = new FileOutputStream(manifestFile);
+                                out.write(GSON.toJson(manifest).getBytes(StandardCharsets.UTF_8));
+                                out.close();
+                            } catch (FileAlreadyExistsException e) {
+                                logger.info("File already exists");
+                            }
+                        }
                         modelManager.updateModel(archive.getModelName(), workers, workers);
                     } catch (ModelException | IOException e) {
                         logger.warn("Failed to load model: " + file.getAbsolutePath(), e);
