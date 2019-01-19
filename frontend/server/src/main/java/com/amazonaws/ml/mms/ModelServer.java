@@ -38,8 +38,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.InvalidPropertiesFormatException;
@@ -51,6 +49,7 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,7 +130,7 @@ public class ModelServer {
             }
 
             File modelStoreDir = new File(modelStore);
-            if (Files.isDirectory(Paths.get(modelStore))) {
+            if (!modelStoreDir.exists()) {
                 logger.warn("Model store path is not found: {}", modelStore);
                 return;
             }
@@ -151,28 +150,43 @@ public class ModelServer {
                             && !fileName.endsWith(".model")) {
                         continue;
                     }
+                    if (file.getName().equals("code")){
+                        continue;
+                    }
                     try {
                         logger.debug("Loading models from model store: {}", file.getName());
                         ModelArchive archive = null;
-                        if (configManager.getDefaultServiceHandler() == null) {
-                            archive = modelManager.registerModel(file.getName());
-                        } else {
-                            archive =
-                                    modelManager.registerModel(
-                                            file.getName(),
-                                            file.getName(),
-                                            null,
-                                            configManager.getDefaultServiceHandler(),
-                                            1,
-                                            100);
-                            Manifest manifest = archive.getManifest();
+                        if (configManager.getDefaultServiceHandler() != null) {
+                            // Get the full file path
+                            String[] customService =
+                                    configManager.getDefaultServiceHandler().split(":", 2);
+                            // [0] is file and [1] is entry function
+                            // Verify the python file location
+                            File serviceFile = new File(customService[0]);
+                            if (!serviceFile.isFile()) {
+                                logger.error(
+                                        "Location of default service file {} is not valid",
+                                        serviceFile);
+                                return;
+                            }
+                            // Copy the wrapper service to the model directory
+                            FileUtils.copyFileToDirectory(serviceFile, file);
+                            // Create a MANIFEST
+                            String[] temp = customService[0].split("/");
+                            logger.info(temp[temp.length-1]);
+                            String[] tempFile = temp[temp.length - 1].split(".py");
+                            String customModuleName = tempFile[0];
+                            logger.info(customModuleName);
+                            Manifest manifest = new Manifest();
                             manifest.getModel().setModelName(file.getName());
                             manifest.getModel()
-                                    .setHandler(configManager.getDefaultServiceHandler());
+                                    .setHandler(customModuleName + ':' + customService[1]);
                             manifest.getModel().addExtension("graphName", file.getName());
                             String manifestFileString =
-                                    archive.getModelDir() + "/MAR-INF/MANIFEST.json";
+                                    modelStore + '/' + file.getName() + "/MAR-INF/MANIFEST.json";
+                            logger.info(manifestFileString);
                             File manifestFile = new File(manifestFileString);
+
                             try {
                                 if (!manifestFile.getParentFile().getAbsoluteFile().mkdirs()
                                         && !manifestFile.getAbsoluteFile().createNewFile()) {
@@ -185,6 +199,7 @@ public class ModelServer {
                                 logger.info("File already exists");
                             }
                         }
+                        archive = modelManager.registerModel(file.getName());
                         modelManager.updateModel(archive.getModelName(), workers, workers);
                     } catch (ModelException | IOException e) {
                         logger.warn("Failed to load model: " + file.getAbsolutePath(), e);
